@@ -37,7 +37,18 @@ app.get('/favicon.ico', async (c) => {
 app.all('*', async (c) => {
 	const id: DurableObjectId = c.env.LOAD_BALANCER.idFromName('loadbalancer');
 	const stub = c.env.LOAD_BALANCER.get(id, { locationHint: 'wnam' });
-	const resp = await stub.fetch(c.req.raw);
+	const originalReq = c.req.raw;
+	const headers = new Headers(originalReq.headers);
+	const sessionKey = getCookie(c, 'auth-key');
+	if (sessionKey && !headers.has('Authorization')) {
+		headers.set('Authorization', `Bearer ${sessionKey}`);
+	}
+	const forwardReq = new Request(originalReq.url, {
+		method: originalReq.method,
+		headers,
+		body: originalReq.method === 'GET' || originalReq.method === 'HEAD' ? undefined : originalReq.body,
+	});
+	const resp = await stub.fetch(forwardReq);
 	return new Response(resp.body, {
 		status: resp.status,
 		headers: resp.headers,
